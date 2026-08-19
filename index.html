@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>汉字道 · HSK Trainer</title>
+<link rel="stylesheet" href="styles.css?v=20260813a">
+</head>
+<body>
+<div id="app">
+
+  <div id="screen-setup" class="screen active">
+    <div class="setup-container">
+      <div class="setup-hero">
+        <div class="hanzi">汉字道</div>
+        <h1>HSK Trainer</h1>
+        <p>Путь к уровню HSK3 — шаг за шагом</p>
+      </div>
+
+      <div class="setup-card">
+        <h3>📊 Ваш текущий уровень</h3>
+        <div class="option-group" id="level-options">
+          <button class="option-btn" data-action="select-level" data-val="beginner">
+            <span class="opt-icon">🌱</span>
+            <div><span class="opt-label">Новичок</span><span class="opt-sub">Китайский — с нуля</span></div>
+          </button>
+          <button class="option-btn" data-action="select-level" data-val="hsk1">
+            <span class="opt-icon">📖</span>
+            <div><span class="opt-label">Знаю базу</span><span class="opt-sub">~150 слов, HSK1 пройден</span></div>
+          </button>
+          <button class="option-btn" data-action="select-level" data-val="hsk2">
+            <span class="opt-icon">🎯</span>
+            <div><span class="opt-label">HSK2</span><span class="opt-sub">~300 слов, HSK2 пройден</span></div>
+          </button>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>📅 Цель: за сколько дней?</h3>
+        <div class="slider-wrap">
+          <input type="range" class="slider" id="days-slider" min="60" max="120" value="90">
+          <div class="slider-val" id="days-val">90 дней (~3 месяца)</div>
+        </div>
+        <div class="setup-info mt16" id="plan-info">Выберите уровень, чтобы увидеть план.</div>
+      </div>
+
+      <button class="btn-primary" id="btn-start-setup" disabled data-action="start-setup">Начать обучение →</button>
+    </div>
+  </div>
+
+  <div id="screen-main" class="screen">
+    <div class="header">
+      <div class="logo">汉字道 <span>HSK Trainer</span></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="streak-badge" id="streak-display">🔥 0 дней</div>
+        <nav class="nav">
+          <button class="nav-btn active" data-action="show-tab" data-tab="today">📅 <span>Сегодня</span></button>
+          <button class="nav-btn" data-action="show-tab" data-tab="dict">📖 <span>Словарь</span></button>
+          <button class="nav-btn" data-action="show-tab" data-tab="stats">📊 <span>Стат</span></button>
+        </nav>
+      </div>
+    </div>
+
+    <div id="tab-today" class="today-container">
+      <div class="today-greeting">
+        <h2 id="greeting-text">Добрый день!</h2>
+        <p id="greeting-sub">Выберите режим и начните практику</p>
+      </div>
+
+      <div class="today-cards" style="grid-template-columns:repeat(3,1fr)">
+        <div class="today-card tc-new">
+          <div class="tc-val" id="today-new-count">0</div>
+          <div class="tc-label">НОВЫХ</div>
+        </div>
+        <div class="today-card tc-review">
+          <div class="tc-val" id="today-review-count">0</div>
+          <div class="tc-label">ПОВТОРИТЬ</div>
+        </div>
+        <div class="today-card" style="border-color:rgba(106,206,168,0.3)">
+          <div class="tc-val" style="color:var(--green)" id="today-mastered-count">0</div>
+          <div class="tc-label">ОСВОЕНО</div>
+        </div>
+      </div>
+
+      <div class="section-label mt16">РЕЖИМЫ ОБУЧЕНИЯ</div>
+      <div class="mode-grid">
+        <button class="mode-card" data-action="start-session" data-mode="words_new">
+          <div class="mode-icon">🆕</div>
+          <div class="mode-name">Новые слова</div>
+          <div class="mode-desc">Вводим <span id="wpd-label">10</span> новых слов</div>
+        </button>
+        <button class="mode-card" data-action="start-session" data-mode="words_review">
+          <div class="mode-icon">🔄</div>
+          <div class="mode-name">Повторение</div>
+          <div class="mode-desc">Все слова на сегодня</div>
+        </button>
+        <button class="mode-card" data-action="start-session" data-mode="words_hard">
+          <div class="mode-icon">🔴</div>
+          <div class="mode-name">Сложные</div>
+          <div class="mode-desc">Слова с ошибками</div>
+        </button>
+        <button class="mode-card mode-sentences" data-action="start-session" data-mode="sentences">
+          <div class="mode-icon">💬</div>
+          <div class="mode-name">Предложения</div>
+          <div class="mode-desc">Переводи целые фразы</div>
+        </button>
+        <button class="mode-card" data-action="start-session" data-mode="words_listening">
+          <div class="mode-icon">🎧</div>
+          <div class="mode-name">Аудирование</div>
+          <div class="mode-desc">Слушай и узнавай на слух</div>
+        </button>
+        <button class="mode-card" data-action="start-session" data-mode="words_typing">
+          <div class="mode-icon">⌨️</div>
+          <div class="mode-name">Написание</div>
+          <div class="mode-desc">Иероглиф или пиньинь — на выбор</div>
+        </button>
+        <button class="mode-card" data-action="start-session" data-mode="words_radical">
+          <div class="mode-icon">🧩</div>
+          <div class="mode-name">Радикалы</div>
+          <div class="mode-desc">Из чего состоит иероглиф</div>
+        </button>
+
+        <button class="mode-card mode-exam" id="exam-mode-btn" data-action="start-session" data-mode="exam">
+          <div class="mode-icon">📝</div>
+          <div class="mode-name" id="exam-mode-name">Контрольный экзамен</div>
+          <div class="mode-desc" id="exam-mode-desc">Откроется после 5 завершённых уроков</div>
+        </button>
+        <button class="mode-card mode-all" data-action="start-session" data-mode="all">
+          <div class="mode-icon">⚡</div>
+          <div class="mode-name">Полная сессия</div>
+          <div class="mode-desc">Новые + повтор + предложения</div>
+        </button>
+      </div>
+
+      <div class="section-label mt16">ПЛАН ОБУЧЕНИЯ — УРОКИ</div>
+      <div id="lesson-plan-list" style="margin-bottom:32px;"></div>
+
+    </div>
+
+    <div id="tab-stats" class="stats-container" style="display:none">
+      <div class="stats-title">Статистика</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="s-val" id="stat-total">0</div><div class="s-label">ИЗУЧЕНО СЛОВ</div></div>
+        <div class="stat-card"><div class="s-val" id="stat-mastered">0</div><div class="s-label">ОСВОЕНО</div></div>
+        <div class="stat-card"><div class="s-val" id="stat-streak">0</div><div class="s-label">СТРИК (ДНИ)</div></div>
+        <div class="stat-card"><div class="s-val" id="stat-accuracy">0%</div><div class="s-label">ТОЧНОСТЬ</div></div>
+      </div>
+
+      <div class="hsk-progress">
+        <h3>Прогресс по уровням</h3>
+        <div class="hsk-row">
+          <div class="hsk-row-header"><span>HSK1</span><span id="hsk1-frac">0/150</span></div>
+          <div class="hsk-bar"><div class="hsk-bar-fill hsk1-fill" id="hsk1-bar" style="width:0%"></div></div>
+        </div>
+        <div class="hsk-row">
+          <div class="hsk-row-header"><span>HSK2</span><span id="hsk2-frac">0/150</span></div>
+          <div class="hsk-bar"><div class="hsk-bar-fill hsk2-fill" id="hsk2-bar" style="width:0%"></div></div>
+        </div>
+        <div class="hsk-row">
+          <div class="hsk-row-header"><span>HSK3</span><span id="hsk3-frac">0/300</span></div>
+          <div class="hsk-bar"><div class="hsk-bar-fill hsk3-fill" id="hsk3-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <button class="btn-reset" style="background:rgba(124,158,248,0.08);border-color:rgba(124,158,248,0.3);color:var(--accent3);margin-bottom:12px;" data-action="open-pace-settings">⚙️ Изменить темп обучения</button>
+      <div id="voice-picker-container" style="margin-bottom:12px;"></div>
+      <div id="cloud-tts-toggle-container" style="margin-bottom:12px;"></div>
+      <div id="gemini-key-container" style="margin-bottom:12px;"></div>
+      <div id="typing-mode-toggle-container" style="margin-bottom:12px;"></div>
+      <button class="btn-reset" data-action="reset-data">⚠️ Сбросить прогресс</button>
+    </div>
+
+    <div id="tab-dict" class="dict-container" style="display:none">
+      <div class="dict-header">
+        <div class="dict-search-wrap">
+          <span class="dict-search-icon">🔍</span>
+          <input type="text" id="dict-search" class="dict-search" placeholder="Иероглиф, пиньинь или перевод...">
+          <button class="dict-search-clear" id="dict-clear" data-action="clear-dict-search" style="display:none">✕</button>
+        </div>
+        <div class="dict-filters">
+          <button class="dict-filter active" data-action="set-dict-filter" data-lvl="0">Все</button>
+          <button class="dict-filter" data-action="set-dict-filter" data-lvl="1">HSK1</button>
+          <button class="dict-filter" data-action="set-dict-filter" data-lvl="2">HSK2</button>
+          <button class="dict-filter" data-action="set-dict-filter" data-lvl="3">HSK3</button>
+          <button class="dict-filter dict-filter-known" data-action="set-dict-filter" data-lvl="10">✓ Изученные</button>
+        </div>
+        <div class="dict-sort-row">
+          <span class="dict-count" id="dict-count">520 слов</span>
+          <div class="dict-sort-btns">
+            <button class="dict-sort active" data-action="set-dict-sort" data-sort="level">По уровню</button>
+            <button class="dict-sort" data-action="set-dict-sort" data-sort="alpha">А→Я</button>
+            <button class="dict-sort" data-action="set-dict-sort" data-sort="status">По статусу</button>
+          </div>
+        </div>
+      </div>
+      <div class="dict-mode-bar">
+        <button class="dict-mode-btn active" id="dmode-list" data-action="set-dict-mode" data-mode="list">📋 Список</button>
+        <button class="dict-mode-btn" id="dmode-listen" data-action="set-dict-mode" data-mode="listen">🔊 Аудио-тренировка</button>
+      </div>
+      <div id="dict-list-view">
+        <div id="dict-words"></div>
+      </div>
+      <div id="dict-listen-view" style="display:none">
+        <div class="listen-card" id="listen-card">
+          <div class="listen-status" id="listen-status">Выберите слова для тренировки произношения</div>
+          <div class="listen-hanzi" id="listen-hanzi"></div>
+          <div class="listen-pinyin" id="listen-pinyin"></div>
+          <div class="listen-translation" id="listen-translation" style="display:none"></div>
+          <div class="listen-controls">
+            <button class="listen-btn" data-action="listen-speak">🔊 Произнести</button>
+            <button class="listen-btn listen-btn-reveal" id="listen-reveal-btn" data-action="listen-reveal">👁 Показать перевод</button>
+          </div>
+          <div class="listen-nav">
+            <button class="listen-nav-btn" data-action="listen-prev">← Пред</button>
+            <span class="listen-nav-pos" id="listen-pos">0 / 0</span>
+            <button class="listen-nav-btn" data-action="listen-next">След →</button>
+          </div>
+          <button class="listen-start-btn" id="listen-start-btn" data-action="start-listen-session">▶ Начать аудио-тренировку</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-card" class="screen">
+    <div class="card-screen-wrap">
+      <div class="card-header">
+        <div class="card-progress">
+          <div class="card-progress-bar"><div class="card-progress-fill" id="card-progress-fill"></div></div>
+          <div class="card-progress-text" id="card-progress-text">0 / 0</div>
+        </div>
+        <button class="btn-close" data-action="end-session">✕</button>
+      </div>
+
+      <div class="card-area">
+        <div class="flashcard" style="min-height:unset;padding:28px 24px;">
+          <div class="flashcard-tag" id="card-tag">NEW</div>
+          <div class="hanzi-big" id="card-hanzi" data-action="speak-current" style="cursor:pointer">好</div>
+          <div class="pinyin-text" id="card-pinyin">hǎo</div>
+          <button class="speak-btn" data-action="speak-current">🔊 Произнести</button>
+
+          <button class="decomp-btn" id="decomp-btn" style="display:none" data-action="toggle-decomp">🧩 Разобрать слово</button>
+          <div class="decomp-panel" id="decomp-panel" style="display:none"></div>
+
+          <div class="mc-options" id="mc-options">
+            <button class="mc-btn" id="mc0" data-action="choose-answer" data-index="0"></button>
+            <button class="mc-btn" id="mc1" data-action="choose-answer" data-index="1"></button>
+            <button class="mc-btn" id="mc2" data-action="choose-answer" data-index="2"></button>
+            <button class="mc-btn" id="mc3" data-action="choose-answer" data-index="3"></button>
+          </div>
+
+          <div class="typing-input-area" id="typing-input-area" style="display:none;">
+            <input type="text" id="typing-input" class="typing-input" placeholder="Напиши иероглиф (нужна китайская раскладка)" autocomplete="off" autocapitalize="off" spellcheck="false" lang="zh-CN" inputmode="text">
+            <button class="next-btn" id="typing-submit-btn" data-action="submit-typing">Проверить</button>
+          </div>
+
+          <div class="result-hint" id="result-hint"></div>
+          <button class="ai-explain-btn" id="ai-explain-btn" data-action="ai-explain-word" style="display:none;">🤖 Объяснить</button>
+          <div class="ai-explain-box" id="ai-explain-box" style="display:none;"></div>
+          <button class="next-btn" id="next-btn" data-action="next-card">Далее →</button>
+
+          <button class="skip-btn" id="skip-btn" data-action="skip-known">Уже знаю это слово ↷</button>
+          <div class="kbd-hint">1–4 выбрать ответ · Enter/Space — далее · Esc — выйти</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-done" class="screen">
+    <div class="session-complete">
+      <div class="big-emoji" id="done-emoji">🎯</div>
+      <h2 id="done-title">Сессия завершена!</h2>
+      <p id="done-msg">Отличная работа. Продолжайте каждый день!</p>
+      <div class="session-stats">
+        <div class="s-stat"><div class="val green" id="done-know">0</div><div class="lbl">ЗНАЮ</div></div>
+        <div class="s-stat"><div class="val red" id="done-dontknow">0</div><div class="lbl">НЕ ЗНАЮ</div></div>
+        <div class="s-stat"><div class="val" id="done-total-sess">0</div><div class="lbl">ВСЕГО</div></div>
+      </div>
+      <button class="btn-primary" style="max-width:300px" data-action="go-home">На главную</button>
+    </div>
+  </div>
+
+  <div id="screen-sentence" class="screen">
+    <div class="card-screen-wrap">
+      <div class="card-header">
+        <div class="card-progress">
+          <div class="card-progress-bar"><div class="card-progress-fill" id="sent-progress-fill"></div></div>
+          <div class="card-progress-text" id="sent-progress-text">0 / 0</div>
+        </div>
+        <button class="btn-close" data-action="go-home">✕</button>
+      </div>
+      <div class="card-area">
+        <div class="flashcard" style="min-height:unset;padding:28px 24px;">
+          <div class="flashcard-tag tag-new">💬 ФРАЗА</div>
+          <div class="sentence-zh" id="sent-zh"></div>
+          <div class="sentence-pinyin" id="sent-py"></div>
+          <button class="speak-btn" data-action="speak-sentence-current">🔊 Произнести</button>
+          <div id="sent-instruction" style="font-size:11px;color:var(--text3);margin-top:6px;letter-spacing:1px;">ВЫБЕРИТЕ ПЕРЕВОД</div>
+          <div class="mc-options" id="sent-options">
+            <button class="mc-btn" id="sent-mc0"></button>
+            <button class="mc-btn" id="sent-mc1"></button>
+            <button class="mc-btn" id="sent-mc2"></button>
+            <button class="mc-btn" id="sent-mc3"></button>
+          </div>
+          <div class="result-hint" id="sent-hint"></div>
+          <button class="ai-explain-btn" id="sent-ai-explain-btn" data-action="ai-explain-sentence" style="display:none;">🤖 Объяснить</button>
+          <div class="ai-explain-box" id="sent-ai-explain-box" style="display:none;"></div>
+          <button class="next-btn" id="sent-next-btn" data-action="next-sentence">Далее →</button>
+          <div class="kbd-hint">1–4 выбрать ответ · Enter/Space — далее · Esc — выйти</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="data.js?v=20260813a"></script>
+<script src="app.js?v=20260813a"></script>
+</body>
+</html>
