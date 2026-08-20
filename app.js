@@ -932,6 +932,9 @@ function showTab(tab) {
 }
 
 function bindStaticEvents() {
+  document.addEventListener('click', unlockAudioOnFirstInteraction, { once: true, capture: true });
+  document.addEventListener('touchstart', unlockAudioOnFirstInteraction, { once: true, capture: true, passive: true });
+
   document.addEventListener('click', event => {
     const target = event.target.closest('[data-action]');
     if (!target) return;
@@ -1101,6 +1104,30 @@ function bindStaticEvents() {
     }
     if (action === 'next-sentence') {
       nextSentence();
+      return;
+    }
+    if (action === 'wo-place-tile') {
+      const idx = parseInt(target.dataset.idx, 10);
+      if (!Number.isNaN(idx)) woPlaceTile(idx);
+      return;
+    }
+    if (action === 'wo-remove-tile') {
+      const pos = parseInt(target.dataset.pos, 10);
+      if (!Number.isNaN(pos)) woRemoveTile(pos);
+      return;
+    }
+    if (action === 'next-wordorder') {
+      nextWordOrder();
+      return;
+    }
+    if (action === 'speak-wordorder-current') {
+      speakWordOrderCurrent();
+      return;
+    }
+    if (action === 'match-tap-tile') {
+      const pos = parseInt(target.dataset.pos, 10);
+      if (!Number.isNaN(pos)) matchTapTile(pos);
+      return;
     }
   });
 
@@ -1461,6 +1488,24 @@ function startSession(mode) {
       return;
     }
     launchWordSession(shuffle(pool).slice(0, 15), 'words_radical');
+
+  } else if (mode === 'wordorder') {
+
+    const woSents = getSentencesForProgress();
+    if (woSents.length === 0) { showToast('Пройдите хотя бы один урок для разблокировки предложений!'); return; }
+    const withTiles = woSents.filter(s => getWordOrderTiles(s));
+    if (withTiles.length < 3) { showToast('Пока маловато предложений для этого упражнения — пройдите ещё уроков.'); return; }
+    launchWordOrderSession(shuffle([...withTiles]).slice(0, 8));
+
+  } else if (mode === 'match') {
+
+    const learnedForMatch = Object.keys(STATE.progress).map(Number)
+      .filter(i => DICTIONARY[i] && i < curLesson.blockEnd);
+    if (learnedForMatch.length < 6) {
+      showToast('Выучите хотя бы 6 слов, чтобы играть в совпадения.');
+      return;
+    }
+    launchMatchSession(shuffle(learnedForMatch).slice(0, 8));
 
   } else if (mode === 'words_review') {
 
@@ -2085,10 +2130,270 @@ function showSentenceDone(){
 
 function goHome() {
   document.getElementById('char-popup-modal')?.remove();
-  ['screen-done','screen-card','screen-sentence'].forEach(id=>{
+  ['screen-done','screen-card','screen-sentence','screen-wordorder','screen-match'].forEach(id=>{
     const el=document.getElementById(id); if(el)el.classList.remove('active');
   });
   showMainScreen();
+}
+
+// ---- Word order exercise: given a translation, tap the shuffled Chinese
+// word tiles in the correct order to rebuild the sentence — trains grammar
+// and word order specifically, a skill none of the other exercises test.
+let woQueue = [];
+let woIdx = 0;
+let woKnow = 0, woDontKnow = 0;
+let woRevealed = false;
+let woAutoAdvanceTimer = null;
+let currentWoTiles = [];
+let currentWoPlaced = [];
+let currentWoPoolOrder = [];
+
+const PUNCT_ONLY_REGEX = /^[，。？！、：；""''（）\s.,!?;:()"']+$/;
+
+function getWordOrderTiles(s) {
+  const segments = segmentSentenceText(s.zh);
+  const filtered = segments.filter(seg => seg.text && !PUNCT_ONLY_REGEX.test(seg.text));
+  if (filtered.length < 3) return null; // too short to be a meaningful ordering exercise
+  return filtered.map((seg, i) => ({ text: seg.text, correctPos: i }));
+}
+
+function launchWordOrderSession(sentences) {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  woQueue = sentences;
+  woIdx = 0;
+  woKnow = 0;
+  woDontKnow = 0;
+  sessionCombo = 0;
+  sessionMode = 'wordorder';
+  document.getElementById('screen-main').classList.remove('active');
+  document.getElementById('screen-wordorder').classList.add('active');
+  showCurrentWordOrder();
+}
+
+function showCurrentWordOrder() {
+  if (woIdx >= woQueue.length) { showWordOrderDone(); return; }
+  const s = woQueue[woIdx];
+  const tiles = getWordOrderTiles(s);
+  if (!tiles) { woIdx++; showCurrentWordOrder(); return; }
+
+  woRevealed = false;
+  currentWoTiles = tiles;
+  currentWoPlaced = [];
+  document.getElementById('wo-translation').textContent = s.t;
+  document.getElementById('wo-hint').style.display = 'none';
+  document.getElementById('wo-next-btn').style.display = 'none';
+  document.getElementById('wo-speak-btn').style.display = 'none';
+  renderWoTilePool(shuffle(tiles.map((t, i) => i)));
+  renderWoBuildArea();
+
+  const pct = Math.round(woIdx/woQueue.length*100);
+  document.getElementById('wo-progress-fill').style.width = pct+'%';
+  document.getElementById('wo-progress-text').textContent = `${woIdx} / ${woQueue.length}`;
+}
+
+function renderWoTilePool(poolIndices) {
+  currentWoPoolOrder = poolIndices;
+  const el = document.getElementById('wo-tile-pool');
+  el.innerHTML = currentWoPoolOrder.map(idx =>
+    `<button class="wo-tile" data-action="wo-place-tile" data-idx="${idx}">${escapeHtml(currentWoTiles[idx].text)}</button>`
+  ).join('');
+}
+
+function renderWoBuildArea() {
+  const el = document.getElementById('wo-build-area');
+  if (currentWoPlaced.length === 0) {
+    el.innerHTML = `<span style="color:var(--text3);font-size:12px;">Собери предложение здесь</span>`;
+    return;
+  }
+  el.innerHTML = currentWoPlaced.map((idx, pos) =>
+    `<button class="wo-tile placed" data-action="wo-remove-tile" data-pos="${pos}">${escapeHtml(currentWoTiles[idx].text)}</button>`
+  ).join('');
+}
+
+function woPlaceTile(idx) {
+  if (woRevealed) return;
+  currentWoPlaced.push(idx);
+  currentWoPoolOrder = currentWoPoolOrder.filter(i => i !== idx);
+  renderWoTilePool(currentWoPoolOrder);
+  renderWoBuildArea();
+  if (currentWoPoolOrder.length === 0) checkWordOrder();
+}
+
+function woRemoveTile(pos) {
+  if (woRevealed) return;
+  const idx = currentWoPlaced[pos];
+  currentWoPlaced.splice(pos, 1);
+  currentWoPoolOrder.push(idx);
+  renderWoTilePool(currentWoPoolOrder);
+  renderWoBuildArea();
+}
+
+function checkWordOrder() {
+  woRevealed = true;
+  const s = woQueue[woIdx];
+  const correct = currentWoPlaced.length === currentWoTiles.length &&
+    currentWoPlaced.every((idx, pos) => currentWoTiles[idx].correctPos === pos);
+
+  const buildEl = document.getElementById('wo-build-area');
+  [...buildEl.children].forEach((btn, pos) => {
+    const idx = currentWoPlaced[pos];
+    btn.classList.remove('placed');
+    btn.classList.add(currentWoTiles[idx].correctPos === pos ? 'correct-final' : 'wrong-final');
+    btn.disabled = true;
+  });
+
+  const hint = document.getElementById('wo-hint');
+  if (correct) {
+    woKnow++;
+    sessionCombo++;
+    hint.textContent = sessionCombo >= 3 ? `✓ Верно! 🔥 Серия: ${sessionCombo}` : '✓ Верно!';
+    hint.className = 'result-hint ok';
+  } else {
+    woDontKnow++;
+    sessionCombo = 0;
+    hint.textContent = `✗ Правильно: ${s.zh}`;
+    hint.className = 'result-hint fail';
+  }
+  hint.style.display = 'block';
+  document.getElementById('wo-next-btn').style.display = 'block';
+  document.getElementById('wo-speak-btn').style.display = 'inline-block';
+
+  const playPromise = speakWord(s.zh);
+  if (correct) {
+    playPromise.finally(() => {
+      if (!woRevealed) return;
+      woAutoAdvanceTimer = setTimeout(() => { if (woRevealed) nextWordOrder(); }, 600);
+    });
+  }
+}
+
+function nextWordOrder() {
+  if (woAutoAdvanceTimer) { clearTimeout(woAutoAdvanceTimer); woAutoAdvanceTimer = null; }
+  woIdx++;
+  showCurrentWordOrder();
+}
+
+function speakWordOrderCurrent() {
+  const s = woQueue[woIdx];
+  if (s) speakWord(s.zh);
+}
+
+function showWordOrderDone() {
+  document.getElementById('screen-wordorder').classList.remove('active');
+  document.getElementById('screen-done').classList.add('active');
+  const total = woKnow + woDontKnow;
+  const pct = total > 0 ? Math.round(woKnow/total*100) : 0;
+  document.getElementById('done-know').textContent = woKnow;
+  document.getElementById('done-dontknow').textContent = woDontKnow;
+  document.getElementById('done-total-sess').textContent = total;
+  document.getElementById('done-emoji').textContent = pct>=80?'🏆':'💪';
+  document.getElementById('done-title').textContent = 'Порядок слов завершён!';
+  document.getElementById('done-msg').textContent = `Точность: ${pct}%. Так тренируется грамматика!`;
+}
+
+// ---- Matching pairs game: hanzi tiles and translation tiles scattered in a
+// grid, tap two to check if they're the same word — a lower-pressure, more
+// game-like way to review a batch of words versus the graded quizzes.
+let matchWords = [];
+let matchTiles = [];
+let matchSelectedPos = null;
+let matchPairsFound = 0;
+let matchTotalPairs = 0;
+let matchWrongCount = 0;
+
+function launchMatchSession(wordIndices) {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  matchWords = wordIndices;
+  matchTotalPairs = matchWords.length;
+  matchPairsFound = 0;
+  matchWrongCount = 0;
+  matchSelectedPos = null;
+  sessionMode = 'match';
+
+  const tiles = [];
+  matchWords.forEach(wi => {
+    const w = DICTIONARY[wi];
+    tiles.push({ wordIdx: wi, text: w.h, type: 'zh', matched: false });
+    tiles.push({ wordIdx: wi, text: w.t, type: 'meaning', matched: false });
+  });
+  matchTiles = shuffle(tiles);
+
+  document.getElementById('screen-main').classList.remove('active');
+  document.getElementById('screen-match').classList.add('active');
+  renderMatchGrid();
+  updateMatchProgress();
+}
+
+function renderMatchGrid() {
+  const el = document.getElementById('match-grid');
+  el.innerHTML = matchTiles.map((t, pos) => {
+    const classes = ['match-tile'];
+    if (t.type === 'zh') classes.push('zh');
+    if (t.matched) classes.push('matched');
+    if (pos === matchSelectedPos) classes.push('selected');
+    return `<button class="${classes.join(' ')}" data-action="match-tap-tile" data-pos="${pos}" ${t.matched ? 'disabled' : ''}>${escapeHtml(t.text)}</button>`;
+  }).join('');
+}
+
+function updateMatchProgress() {
+  document.getElementById('match-progress-text').textContent = `${matchPairsFound} / ${matchTotalPairs} пар`;
+  const pct = matchTotalPairs > 0 ? Math.round(matchPairsFound/matchTotalPairs*100) : 0;
+  document.getElementById('match-progress-fill').style.width = pct + '%';
+}
+
+function matchTapTile(pos) {
+  const tile = matchTiles[pos];
+  if (!tile || tile.matched || pos === matchSelectedPos) return;
+
+  if (matchSelectedPos === null) {
+    matchSelectedPos = pos;
+    renderMatchGrid();
+    return;
+  }
+
+  const first = matchTiles[matchSelectedPos];
+  const second = tile;
+  const isMatch = first.wordIdx === second.wordIdx && first.type !== second.type;
+
+  if (isMatch) {
+    first.matched = true;
+    second.matched = true;
+    matchPairsFound++;
+    matchSelectedPos = null;
+    renderMatchGrid();
+    updateMatchProgress();
+    speakWord(DICTIONARY[first.wordIdx].h);
+    if (matchPairsFound >= matchTotalPairs) {
+      setTimeout(() => showMatchDone(), 500);
+    }
+  } else {
+    matchWrongCount++;
+    const firstPos = matchSelectedPos;
+    const secondPos = pos;
+    matchSelectedPos = null;
+    renderMatchGrid();
+    const grid = document.getElementById('match-grid');
+    const btn1 = grid.children[firstPos];
+    const btn2 = grid.children[secondPos];
+    if (btn1) btn1.classList.add('wrong-flash');
+    if (btn2) btn2.classList.add('wrong-flash');
+    setTimeout(() => {
+      if (btn1) btn1.classList.remove('wrong-flash');
+      if (btn2) btn2.classList.remove('wrong-flash');
+    }, 500);
+  }
+}
+
+function showMatchDone() {
+  document.getElementById('screen-match').classList.remove('active');
+  document.getElementById('screen-done').classList.add('active');
+  document.getElementById('done-know').textContent = matchTotalPairs;
+  document.getElementById('done-dontknow').textContent = matchWrongCount;
+  document.getElementById('done-total-sess').textContent = matchTotalPairs;
+  document.getElementById('done-emoji').textContent = matchWrongCount === 0 ? '🏆' : '💪';
+  document.getElementById('done-title').textContent = 'Игра завершена!';
+  document.getElementById('done-msg').textContent =
+    `Все ${matchTotalPairs} пар найдены${matchWrongCount > 0 ? ', ошибок: ' + matchWrongCount : ' без единой ошибки'}!`;
 }
 
 // Firefox (and some other browsers) only expose the OS's built-in system
@@ -2199,21 +2504,58 @@ function speakWithBrowserTTS(text) {
   return new Promise(resolve => {
     if (!window.speechSynthesis) { resolve(); return; }
     if (!preferredChineseVoice) refreshSpeechVoices();
-    const utt = new SpeechSynthesisUtterance(text);
-    if (preferredChineseVoice) {
-      utt.voice = preferredChineseVoice;
-      utt.lang = preferredChineseVoice.lang || 'zh-CN';
-    } else {
-      utt.lang = 'zh-CN';
-    }
-    utt.rate = 0.78;
-    utt.pitch = 1;
-    utt.volume = 1;
-    utt.onend = () => resolve();
-    utt.onerror = () => resolve();
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utt);
+    // Mobile Safari has a long-documented quirk where calling speak()
+    // immediately after cancel() can silently swallow the utterance (no
+    // sound, no error) — a short delay before speaking works around it.
+    // Harmless everywhere else since it's a single animation frame.
+    requestAnimationFrame(() => {
+      const utt = new SpeechSynthesisUtterance(text);
+      if (preferredChineseVoice) {
+        utt.voice = preferredChineseVoice;
+        utt.lang = preferredChineseVoice.lang || 'zh-CN';
+      } else {
+        utt.lang = 'zh-CN';
+      }
+      utt.rate = 0.78;
+      utt.pitch = 1;
+      utt.volume = 1;
+      utt.onend = () => resolve();
+      utt.onerror = () => resolve();
+      window.speechSynthesis.speak(utt);
+    });
   });
+}
+
+// Mobile browsers (iOS Safari especially, some Android browsers too) only
+// allow audio to play programmatically after it's been "unlocked" by a
+// direct user gesture at least once. Priming both the shared Audio element
+// and SpeechSynthesis on the very first tap anywhere on the page means every
+// *later* auto-play (e.g. a card's audio firing after a timed transition,
+// which is no longer a direct gesture) has already been granted permission
+// for this session, instead of silently failing with no sound and no error.
+let __audioUnlocked = false;
+function unlockAudioOnFirstInteraction() {
+  if (__audioUnlocked) return;
+  __audioUnlocked = true;
+  try {
+    if (!window.__hskAudio) window.__hskAudio = new Audio();
+    const audio = window.__hskAudio;
+    // A silent, near-instant WAV data URI — playing (and immediately
+    // pausing) it counts as the required user-gesture-triggered playback
+    // that unlocks the element for later programmatic use.
+    audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+    const p = audio.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+    setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch (e) {} }, 50);
+  } catch (e) {}
+  try {
+    if (window.speechSynthesis) {
+      const utt = new SpeechSynthesisUtterance(' ');
+      utt.volume = 0;
+      window.speechSynthesis.speak(utt);
+    }
+  } catch (e) {}
 }
 
 // Returns a Promise that resolves once playback has actually finished, so
@@ -2632,7 +2974,7 @@ function openPaceSettings() {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'pace-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);';
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
@@ -2816,7 +3158,7 @@ function showWordDetail(w) {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'word-detail-modal';
-    modal.style.cssText = `position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);`;
+    modal.style.cssText = `position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);`;
     modal.onclick = (e) => { if(e.target===modal) modal.remove(); };
     document.body.appendChild(modal);
   }

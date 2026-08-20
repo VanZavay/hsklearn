@@ -119,6 +119,16 @@
           <div class="mode-name">Радикалы</div>
           <div class="mode-desc">Из чего состоит иероглиф</div>
         </button>
+        <button class="mode-card" data-action="start-session" data-mode="wordorder">
+          <div class="mode-icon">🔤</div>
+          <div class="mode-name">Порядок слов</div>
+          <div class="mode-desc">Собери предложение из плиток</div>
+        </button>
+        <button class="mode-card" data-action="start-session" data-mode="match">
+          <div class="mode-icon">🃏</div>
+          <div class="mode-name">Совпадения</div>
+          <div class="mode-desc">Найди пары иероглиф-перевод</div>
+        </button>
 
         <button class="mode-card mode-exam" id="exam-mode-btn" data-action="start-session" data-mode="exam">
           <div class="mode-icon">📝</div>
@@ -306,6 +316,48 @@
           <div class="ai-explain-box" id="sent-ai-explain-box" style="display:none;"></div>
           <button class="next-btn" id="sent-next-btn" data-action="next-sentence">Далее →</button>
           <div class="kbd-hint">1–4 выбрать ответ · Enter/Space — далее · Esc — выйти</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="screen-wordorder" class="screen">
+    <div class="card-screen-wrap">
+      <div class="card-header">
+        <div class="card-progress">
+          <div class="card-progress-bar"><div class="card-progress-fill" id="wo-progress-fill"></div></div>
+          <div class="card-progress-text" id="wo-progress-text">0 / 0</div>
+        </div>
+        <button class="btn-close" data-action="go-home">✕</button>
+      </div>
+      <div class="card-area">
+        <div class="flashcard" style="min-height:unset;padding:28px 24px;">
+          <div class="flashcard-tag tag-new">🔤 ПОРЯДОК СЛОВ</div>
+          <div class="sentence-prompt-ru" id="wo-translation" style="margin-bottom:14px;"></div>
+          <div class="wo-build-area" id="wo-build-area"></div>
+          <div class="wo-tile-pool" id="wo-tile-pool"></div>
+          <button class="speak-btn" id="wo-speak-btn" data-action="speak-wordorder-current" style="display:none;">🔊 Произнести</button>
+          <div class="result-hint" id="wo-hint"></div>
+          <button class="next-btn" id="wo-next-btn" data-action="next-wordorder" style="display:none;">Далее →</button>
+          <div class="kbd-hint">Тапни плитки по порядку · Esc — выйти</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-match" class="screen">
+    <div class="card-screen-wrap">
+      <div class="card-header">
+        <div class="card-progress">
+          <div class="card-progress-bar"><div class="card-progress-fill" id="match-progress-fill"></div></div>
+          <div class="card-progress-text" id="match-progress-text">0 пар</div>
+        </div>
+        <button class="btn-close" data-action="go-home">✕</button>
+      </div>
+      <div class="card-area">
+        <div class="flashcard" style="min-height:unset;padding:24px 18px;">
+          <div class="flashcard-tag tag-new">🃏 СОВПАДЕНИЯ</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Найди пары: иероглиф ↔ перевод</div>
+          <div class="match-grid" id="match-grid"></div>
         </div>
       </div>
     </div>
