@@ -823,7 +823,7 @@ function showCurrentCard() {
     for (let i=0;i<4;i++) {
       const btn = document.getElementById('mc'+i);
       btn.textContent = allOptions[i];
-      btn.className = 'mc-btn mc-btn-zh' + ((allOptions[i]||'').length > 22 ? ' mc-btn-long' : '');
+      btn.className = 'mc-btn mc-btn-zh' + ((allOptions[i]||'').length > 14 ? ' mc-btn-long' : '');
       btn.disabled = false;
     }
   } else if (isRadical) {
@@ -844,7 +844,7 @@ function showCurrentCard() {
     for (let i=0;i<4;i++) {
       const btn = document.getElementById('mc'+i);
       btn.textContent = allOptions[i];
-      btn.className = 'mc-btn' + ((allOptions[i]||'').length > 22 ? ' mc-btn-long' : '');
+      btn.className = 'mc-btn' + ((allOptions[i]||'').length > 14 ? ' mc-btn-long' : '');
       btn.disabled = false;
     }
   }
@@ -1000,6 +1000,10 @@ function bindStaticEvents() {
     }
     if (action === 'test-gemini-key') {
       testGeminiKey();
+      return;
+    }
+    if (action === 'diagnose-audio') {
+      diagnoseAudio();
       return;
     }
     if (action === 'set-typing-mode-hanzi') {
@@ -2025,7 +2029,7 @@ function showCurrentSentence() {
   for (let i=0;i<4;i++) {
     const btn = document.getElementById('sent-mc'+i);
     btn.textContent = opts[i]||'';
-    btn.className = 'mc-btn' + (currentSentDir === 'ru2zh' || currentSentDir === 'cloze' ? ' mc-btn-zh' : '') + ((opts[i]||'').length > 22 ? ' mc-btn-long' : '');
+    btn.className = 'mc-btn' + (currentSentDir === 'ru2zh' || currentSentDir === 'cloze' ? ' mc-btn-zh' : '') + ((opts[i]||'').length > 14 ? ' mc-btn-long' : '');
     btn.disabled = false;
     btn.onclick = () => chooseSentAnswer(i, correctOptIdx, correctText, s);
   }
@@ -2310,13 +2314,18 @@ function launchMatchSession(wordIndices) {
   matchSelectedPos = null;
   sessionMode = 'match';
 
-  const tiles = [];
-  matchWords.forEach(wi => {
-    const w = DICTIONARY[wi];
-    tiles.push({ wordIdx: wi, text: w.h, type: 'zh', matched: false });
-    tiles.push({ wordIdx: wi, text: w.t, type: 'meaning', matched: false });
-  });
-  matchTiles = shuffle(tiles);
+  // Two independently-shuffled lists (hanzi, translations) interleaved as
+  // [zh0, meaning0, zh1, meaning1, ...] — with a 2-column grid this renders
+  // as a clean "hanzi on the left, translations on the right" layout
+  // instead of one fully-mixed grid, while each side stays shuffled on its
+  // own so pairs never trivially line up on the same row.
+  const zhTiles = shuffle(matchWords.map(wi => ({ wordIdx: wi, text: DICTIONARY[wi].h, type: 'zh', matched: false })));
+  const meaningTiles = shuffle(matchWords.map(wi => ({ wordIdx: wi, text: DICTIONARY[wi].t, type: 'meaning', matched: false })));
+  matchTiles = [];
+  for (let i = 0; i < matchWords.length; i++) {
+    matchTiles.push(zhTiles[i]);
+    matchTiles.push(meaningTiles[i]);
+  }
 
   document.getElementById('screen-main').classList.remove('active');
   document.getElementById('screen-match').classList.add('active');
@@ -2500,9 +2509,20 @@ function speakWithCloudTTS(text) {
   return speakWithCloudTTSOnce(text).catch(() => speakWithCloudTTSOnce(text));
 }
 
+let __ttsFailureNotified = false;
+function notifyTtsFailureOnce(msg) {
+  if (__ttsFailureNotified) return;
+  __ttsFailureNotified = true;
+  showToast(msg);
+}
+
 function speakWithBrowserTTS(text) {
   return new Promise(resolve => {
-    if (!window.speechSynthesis) { resolve(); return; }
+    if (!window.speechSynthesis) {
+      notifyTtsFailureOnce('Озвучка недоступна в этом браузере (нет Web Speech API).');
+      resolve();
+      return;
+    }
     if (!preferredChineseVoice) refreshSpeechVoices();
     window.speechSynthesis.cancel();
     // Mobile Safari has a long-documented quirk where calling speak()
@@ -2520,9 +2540,20 @@ function speakWithBrowserTTS(text) {
       utt.rate = 0.78;
       utt.pitch = 1;
       utt.volume = 1;
-      utt.onend = () => resolve();
-      utt.onerror = () => resolve();
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; resolve(); } };
+      utt.onend = finish;
+      utt.onerror = finish;
       window.speechSynthesis.speak(utt);
+      // Some Safari versions neither fire onend nor onerror and simply
+      // produce no sound at all — surfacing that once (instead of leaving
+      // it as unexplained silence) makes it possible to actually diagnose.
+      setTimeout(() => {
+        if (!settled && !window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          notifyTtsFailureOnce('Озвучка молча не сработала — браузер её заблокировал. Попробуйте нажать 🔊 ещё раз, или в Статистике отключите «только облачный голос», если он включён.');
+        }
+        finish();
+      }, 1200);
     });
   });
 }
@@ -2592,10 +2623,12 @@ function renderCloudTtsToggle() {
       <input type="checkbox" id="cloud-tts-checkbox" ${enabled ? 'checked' : ''} style="width:16px;height:16px;flex-shrink:0;">
       <span>☁️ Облачная озвучка — звучит естественнее (особенно в Firefox), нужен интернет</span>
     </label>
-    <label style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);cursor:pointer;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);">
+    <label style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);cursor:pointer;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;">
       <input type="checkbox" id="force-cloud-checkbox" ${forceOnly ? 'checked' : ''} style="width:16px;height:16px;flex-shrink:0;">
       <span>🚫 Никогда не использовать голос браузера — при сбое сети лучше тишина, чем роботоголос</span>
     </label>
+    <button data-action="diagnose-audio" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:9px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;font-size:12px;">🔊 Диагностика звука</button>
+    <div id="audio-diag-result" style="margin-top:8px;font-size:11px;line-height:1.6;font-family:'DM Mono',monospace;white-space:pre-wrap;display:none;background:var(--surface2);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
   `;
   document.getElementById('cloud-tts-checkbox').addEventListener('change', e => {
     localStorage.setItem('hsk_cloud_tts', e.target.checked ? '1' : '0');
@@ -2603,6 +2636,92 @@ function renderCloudTtsToggle() {
   document.getElementById('force-cloud-checkbox').addEventListener('change', e => {
     localStorage.setItem('hsk_force_cloud_only', e.target.checked ? '1' : '0');
   });
+}
+
+// Walks the whole audio pipeline step by step and prints exactly what
+// happened at each stage, ON SCREEN — a console.log is useless if the
+// person can't easily open devtools on their phone. This turns "no sound,
+// no idea why" into a copy-pasteable diagnosis.
+async function diagnoseAudio() {
+  const out = document.getElementById('audio-diag-result');
+  if (!out) return;
+  out.style.display = 'block';
+  const lines = [];
+  const log = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+
+  log('Браузер: ' + navigator.userAgent);
+  log('Протокол страницы: ' + location.protocol);
+  log('');
+
+  // 1) Audio element + cloud endpoint
+  log('[1/3] Облачная озвучка (Audio-элемент)...');
+  try {
+    if (!window.__hskAudio) window.__hskAudio = new Audio();
+    const audio = window.__hskAudio;
+    const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-CN&q=' + encodeURIComponent('你好');
+    audio.pause();
+    audio.src = url;
+    const result = await new Promise(resolve => {
+      let done = false;
+      const finish = (r) => { if (!done) { done = true; resolve(r); } };
+      audio.onended = () => finish('ok');
+      audio.onerror = () => finish('audio-error');
+      const p = audio.play();
+      if (p && p.catch) p.catch(err => finish('play-rejected: ' + (err?.name || err?.message || err)));
+      setTimeout(() => finish('timeout-5s'), 5000);
+    });
+    log('  → ' + result);
+    if (result === 'ok') log('  ✓ Облачный звук ФАКТИЧЕСКИ проигрался.');
+    else log('  ✗ Облачный звук НЕ проигрался.');
+  } catch (e) {
+    log('  → исключение: ' + (e?.message || e));
+  }
+  log('');
+
+  // 2) Raw network reachability of the endpoint (separately from playback,
+  // to tell apart "blocked by network/CORS" vs "blocked by autoplay policy")
+  log('[2/3] Доступность endpoint (fetch, не для прослушивания)...');
+  try {
+    const testUrl = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-CN&q=test';
+    const res = await fetch(testUrl, { method: 'HEAD' }).catch(async e => {
+      // HEAD may be rejected by the endpoint itself even when reachable — try GET as a fallback check
+      return fetch(testUrl);
+    });
+    log('  → HTTP статус: ' + res.status + (res.ok ? ' (OK, сервер отвечает)' : ' (сервер ответил, но с ошибкой)'));
+  } catch (e) {
+    log('  → сетевая ошибка: ' + (e?.message || e) + ' (похоже на блокировку сети/расширением/DNS)');
+  }
+  log('');
+
+  // 3) Browser speechSynthesis fallback
+  log('[3/3] Голос браузера (speechSynthesis)...');
+  if (!window.speechSynthesis) {
+    log('  ✗ window.speechSynthesis отсутствует в этом браузере вовсе.');
+  } else {
+    const voices = window.speechSynthesis.getVoices();
+    log('  Доступно голосов всего: ' + voices.length);
+    const zhVoices = voices.filter(v => String(v.lang||'').toLowerCase().startsWith('zh'));
+    log('  Китайских голосов: ' + zhVoices.length + (zhVoices.length ? ' (' + zhVoices.map(v=>v.name).join(', ') + ')' : ''));
+    try {
+      const result = await new Promise(resolve => {
+        let done = false;
+        const finish = (r) => { if (!done) { done = true; resolve(r); } };
+        const utt = new SpeechSynthesisUtterance('你好');
+        utt.lang = 'zh-CN';
+        utt.onend = () => finish('ok (onend fired)');
+        utt.onerror = (e) => finish('error: ' + (e?.error || 'unknown'));
+        window.speechSynthesis.speak(utt);
+        setTimeout(() => {
+          finish('timeout-1.5s (speaking=' + window.speechSynthesis.speaking + ', pending=' + window.speechSynthesis.pending + ')');
+        }, 1500);
+      });
+      log('  → ' + result);
+    } catch (e) {
+      log('  → исключение: ' + (e?.message || e));
+    }
+  }
+  log('');
+  log('Скопируйте весь этот текст и отправьте — так будет видно, что именно не работает.');
 }
 
 function speakCurrent() {
